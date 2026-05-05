@@ -1,0 +1,1 @@
+export { default as departmentRouter } from './departments.routes';
