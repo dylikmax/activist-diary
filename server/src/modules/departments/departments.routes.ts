@@ -14,12 +14,15 @@ router.get('/', authenticate, ctrl.getTree);
 // 🔒 Создание: dept_lead и выше (уровень 2+)
 router.post('/', authenticate, requireMinRole(2), validateRequest(createDepartmentSchema), ctrl.create);
 
+router.get('/:id', authenticate, ctrl.getOne);
+
 // 🔒 Обновление: dept_lead и выше
 router.patch('/:id', authenticate, requireMinRole(2), validateRequest(updateDepartmentSchema), ctrl.update);
 
 // 🔒 Удаление: dept_lead и выше (с проверкой на детей)
 router.delete('/:id', authenticate, requireMinRole(2), ctrl.delete);
 
+router.get('/:id/members', authenticate, ctrl.getMembers);
 // 🔒 Добавить участника: dept_lead и выше
 router.post('/:id/members', authenticate, requireMinRole(2), validateRequest(addMemberSchema), ctrl.addMember);
 

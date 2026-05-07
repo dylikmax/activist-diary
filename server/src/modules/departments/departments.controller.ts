@@ -53,4 +53,24 @@ export class DepartmentController {
       res.status(200).json(responseWrapper.success(null));
     } catch (err) { next(err); }
   };
+
+  getOne = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = req.user!;
+    const deptIds: string[] = []; // TODO: заменить на реальный fetch отделов пользователя
+    const dept = await this.service.getDepartmentById(req.params.id, user.id, user.role, deptIds);
+    res.status(200).json(responseWrapper.success(dept));
+  } catch (err) {
+    next(err);
+  }
+};
+
+  getMembers = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const members = await this.service.getDepartmentMembers(req.params.id);
+      res.status(200).json(responseWrapper.success(members));
+    } catch (err) {
+      next(err);
+    }
+  };
 }

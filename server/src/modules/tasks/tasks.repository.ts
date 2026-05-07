@@ -33,6 +33,18 @@ const toMysqlDateTime = (isoStr: string | null | undefined): string | null => {
 export class TaskRepository {
   private pool = getConnectionPool();
 
+    async getAccessibleDeptIds(userId: string): Promise<string[]> {
+    const query = `
+      SELECT d.id FROM departments d
+      WHERE d.leader_id = ? AND d.deleted_at IS NULL
+      UNION
+      SELECT ud.department_id FROM user_departments ud
+      WHERE ud.user_id = ?
+    `;
+    const [rows] = await this.pool.execute<{ id: string }[]>(query, [userId, userId]);
+    return rows.map(r => r.id);
+  }
+
   async findById(id: string): Promise<TaskRecord | null> {
     const [rows] = await this.pool.execute<TaskRecord[]>(
       `SELECT t.*, u.login as assignee_login, u.role as assignee_role, d.name as department_name
@@ -45,13 +57,11 @@ export class TaskRepository {
     return rows[0] || null;
   }
 
-  async findWithPagination(
+    async findWithPagination(
     input: ListTasksInput,
     userId: string,
-    userRole: string,
-    userDeptIds: string[]
+    userRole: string
   ): Promise<{ tasks: TaskRecord[]; total: number }> {
-    // 1. Жёсткая валидация чисел
     const page = Math.max(1, Math.floor(Number(input.page)) || 1);
     const limit = Math.min(Math.max(1, Math.floor(Number(input.limit)) || 20), 100);
     const offset = (page - 1) * limit;
@@ -59,22 +69,29 @@ export class TaskRepository {
     const safeDir = input.sortOrder === 'ASC' ? 'ASC' : 'DESC';
 
     const conditions: string[] = ['t.deleted_at IS NULL'];
-    const params: string[] = [];
+    const params: (string | number)[] = [];
 
-    // 2. Фильтр видимости
-    const isGlobal = ['admin', 'chair', 'vice_chair'].includes(userRole);
+    const isGlobal = ['admin', 'chair', 'vice_chair', 'secretary'].includes(userRole);
+
     if (!isGlobal) {
-      conditions.push('(t.assignee_id = ? OR t.creator_id = ?)');
-      params.push(String(userId), String(userId));
+      const accessibleDeptIds = await this.getAccessibleDeptIds(userId);
+      const visibilityParts: string[] = [];
 
-      if (userDeptIds.length > 0) {
-        // Генерируем ровно столько '?', сколько ID
-        conditions.push(`t.department_id IN (${userDeptIds.map(() => '?').join(', ')})`);
-        params.push(...userDeptIds.map(String));
+      visibilityParts.push('t.assignee_id = ?');
+      params.push(String(userId));
+
+      visibilityParts.push('t.creator_id = ?');
+      params.push(String(userId));
+
+      if (accessibleDeptIds.length > 0) {
+        const placeholders = accessibleDeptIds.map(() => '?').join(', ');
+        visibilityParts.push(`t.department_id IN (${placeholders})`);
+        params.push(...accessibleDeptIds.map(String));
       }
+
+      conditions.push(`(${visibilityParts.join(' OR ')})`);
     }
 
-    // 3. Дополнительные фильтры (безопасное добавление)
     const addFilter = (col: string, val: unknown) => {
       if (val !== undefined && val !== null && val !== '') {
         conditions.push(`${col} = ?`);
@@ -89,12 +106,10 @@ export class TaskRepository {
     const whereClause = conditions.join(' AND ');
     const joins = `LEFT JOIN users u ON t.assignee_id = u.id LEFT JOIN departments d ON t.department_id = d.id`;
 
-    // 4. Формируем SQL. LIMIT/OFFSET подставляем как числа (они уже валидированы)
     const countSql = `SELECT COUNT(*) as total FROM tasks t ${joins} WHERE ${whereClause}`;
     const dataSql = `SELECT t.*, u.login as assignee_login, u.role as assignee_role, d.name as department_name 
                      FROM tasks t ${joins} WHERE ${whereClause} ORDER BY t.${safeSort} ${safeDir} LIMIT ${limit} OFFSET ${offset}`;
 
-    // 5. Выполняем через query (безопаснее для динамических WHERE)
     const [countRows] = await this.pool.query<{ total: number }[]>(countSql, params);
     const total = countRows[0]?.total || 0;
 
@@ -148,11 +163,11 @@ export class TaskRepository {
     await QueryBuilder.executeQuery(`UPDATE tasks SET deleted_at = NOW() WHERE id = ?`, [id]);
   }
 
-  async getAttachmentCount(taskId: string): Promise<number> {
-    const [rows] = await this.pool.execute<{ cnt: number }[]>(
-      `SELECT COUNT(*) as cnt FROM task_attachments WHERE task_id = ? AND deleted_at IS NULL`,
-      [taskId]
-    );
-    return rows[0]?.cnt || 0;
-  }
+async getAttachmentCount(taskId: string): Promise<number> {
+  const [rows] = await this.pool.execute<{ cnt: number }[]>(
+    `SELECT COUNT(*) as cnt FROM task_attachments WHERE task_id = ?`,
+    [taskId]
+  );
+  return rows[0]?.cnt || 0;
+}
 }

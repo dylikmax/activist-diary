@@ -90,4 +90,21 @@ export class DepartmentRepository {
       [userId, deptId]
     );
   }
+
+    async findMembersByDepartmentId(deptId: string): Promise<{
+    user_id: string;
+    login: string;
+    email: string;
+    member_role: string;
+    joined_at: string;
+  }[]> {
+    const [rows] = await this.pool.execute(`
+      SELECT u.id as user_id, u.login, u.email, ud.member_role, ud.joined_at
+      FROM user_departments ud
+      JOIN users u ON ud.user_id = u.id
+      WHERE ud.department_id = ? AND u.deleted_at IS NULL
+      ORDER BY ud.member_role DESC, ud.joined_at ASC
+    `, [deptId]);
+    return rows as any;
+  }
 }

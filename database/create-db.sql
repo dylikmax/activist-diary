@@ -1,4 +1,3 @@
--- Отключаем проверку FK на время создания, чтобы гарантировать порядок
 SET FOREIGN_KEY_CHECKS = 0;
 
 DROP DATABASE IF EXISTS activist_diary;

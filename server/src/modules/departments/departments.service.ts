@@ -50,6 +50,12 @@ export class DepartmentService {
     logger.info(`[Department] Created: ${data.name} (parent: ${data.parent_id || 'root'})`);
   }
 
+    async getDepartmentMembers(deptId: string) {
+    const dept = await this.repo.findById(deptId);
+    if (!dept || dept.deleted_at) throw new HttpError(404, 'DEPARTMENT_NOT_FOUND');
+    return await this.repo.findMembersByDepartmentId(deptId);
+  }
+
   async updateDepartment(id: string, data: UpdateDepartmentInput): Promise<void> {
     const dept = await this.repo.findById(id);
     if (!dept || dept.deleted_at) throw new HttpError(404, 'DEPARTMENT_NOT_FOUND');
@@ -94,6 +100,15 @@ export class DepartmentService {
       conn.release();
     }
   }
+
+  async getDepartmentById(id: string, userId: string, userRole: string, deptIds: string[]) {
+  const dept = await this.repo.findById(id);
+  if (!dept) throw new HttpError(404, 'DEPARTMENT_NOT_FOUND', 'Отдел не найден или удалён');
+  
+  // Опционально: можно добавить проверку доступа (например, только участники отдела или глобальные роли)
+  // Для MVP оставим доступ всем авторизованным пользователям, как в getTree
+  return dept;
+  } 
 
   async setLeader(deptId: string, newLeaderUserId: string): Promise<void> {
   const dept = await this.repo.findById(deptId);
